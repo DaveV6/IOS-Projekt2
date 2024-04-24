@@ -40,49 +40,85 @@ bool inRange(int min, int max, int value) {
     return (value >= min && value <= max);
 }
 
-void cleanMem(shared_t *shared) { munmap(shared, sizeof(shared_t)); }
-
 void initSem(shared_t *shared) {
-    sem_init(shared->printLock, 1, 1);
-    sem_init(shared->boarded, 1, 0);
+    sem_init(&(shared->printLock), 1, 1);
+    sem_init(&(shared->boarded), 1, 0);
     shared->lines = 1;
+    shared->onBoard = 0;
 
-    for(unsigned int i = 1; i < shared->stopAmount; i++) {
-        shared->busStop[i]->waiting = 0;
-        sem_init(shared->busStop[i]->boarding, 1, 0);
-        sem_init(shared->busStop[i]->boarding, 1, 0);
+    for(unsigned int i = 0; i < shared->stopAmount; i++) {
+        shared->busStop[i].skiersWaiting = 0;
+        sem_init(&(shared->busStop[i].boarding), 1, 0);
+        sem_init(&(shared->busStop[i].waiting), 1, 1);
     }
 }
 
 void destSem(shared_t *shared) {
-    sem_destroy(shared->printLock);
-     for(unsigned i = 1; i < shared->stopAmount; i++) {
-        sem_destroy(shared->busStop[i]->boarding);
+    sem_destroy(&(shared->printLock));
+    sem_destroy(&(shared->boarded));
+     for(unsigned i = 0; i < shared->stopAmount; i++) {
+        sem_destroy(&(shared->busStop[i].boarding));
+        sem_destroy(&(shared->busStop[i].waiting));
     }
-    cleanMem(shared);
 }
 
 void printFile(shared_t *shared, char *object, ...) {
-    sem_wait(shared->printLock);
+    sem_wait(&(shared->printLock));
     va_list args;
     va_start(args, object);
-
     fprintf(shared->file, "%ld: ", shared->lines++);
     vfprintf(shared->file, object, args);
-
     fflush(shared->file);
     va_end(args);
-    sem_post(shared->printLock);
+    sem_post(&(shared->printLock));
+}
+
+void bus(shared_t *shared, int TB) {
+    printFile(shared, "BUS: started\n");
+    int randomTime = rand() % (TB);
+
+    for(unsigned id = 0; id < shared->stopAmount; id++) {
+        usleep(randomTime);
+        if(id == shared->stopAmount - 1) {
+            printFile(shared, "BUS: arrived to final\n");
+        } else {
+            printFile(shared, "BUS: arrived to %d\n", id + 1);
+        }
+        for (unsigned int i = 0; i < shared->busStop[id].skiersWaiting; i++) {
+            if(shared->onBoard < shared->busCapacity) {
+                sem_post(&(shared->busStop[id].boarding));
+            }
+        }
+        if(shared->busCapacity == shared->onBoard || shared->busStop[id].skiersWaiting == 0) {
+            sem_post(&(shared->boarded));
+        }
+        if(id == shared->stopAmount - 1) {
+            printFile(shared, "BUS: leaving final\n");
+        } else {
+            printFile(shared, "BUS: leaving %d\n", id + 1);
+        }
+    }
+    printFile(shared, "BUS: finish\n");
 }
 
 void skier(shared_t *shared, int id, int TL) {
     printFile(shared, "L %d: started\n", id);
     int randomTime = rand() % (TL);
     usleep(randomTime);
-    int randomStop = rand() % (shared->stopAmount);
-    shared->busStop[randomStop]->waiting++;
+    srand(time(NULL) ^ (getpid() << 16));
+    int randomStop = rand() % (shared->stopAmount) + 1;
 
-    
+    sem_wait(&(shared->busStop[randomStop - 1].waiting));
+    shared->busStop[randomStop - 1].skiersWaiting++;
+    sem_post(&(shared->busStop[randomStop - 1].waiting));
+    printFile(shared, "L %d: arrived to %d\n", id, randomStop);
+
+    sem_wait(&(shared->busStop[randomStop - 1].boarding));
+    shared->onBoard++;
+    printFile(shared, "L %d: boarding\n", id);
+    sem_post(&(shared->busStop[randomStop - 1].boarding));
+
+    sem_post(&(shared->boarded));
 
 }
 
@@ -100,12 +136,10 @@ int main(int argc, char *argv[]) {
         errorMessage(argRange);
     }
 
-    srand(time(NULL) ^ (getpid() << 16));
-
     shared_t *sharedMem;
 
     MMAP(sharedMem, sizeof(shared_t));
-    MMAP(sharedMem->busStop, Z * sizeof(stop_t *));
+    MMAP(sharedMem->busStop, Z * sizeof(stop_t));
 
     sharedMem->skierAmount = L;
     sharedMem->stopAmount = Z;
@@ -118,7 +152,15 @@ int main(int argc, char *argv[]) {
         errorMessage(fileError);
     }
 
-    for(unsigned int i = 0; i < sharedMem->skierAmount; i++) {
+    pid_t busPid = fork();
+    if(busPid == 0) {
+        bus(sharedMem, TB);
+        exit(EXIT_SUCCESS);
+    } else if(busPid < 0) {
+        errorMessage(memError);
+    }
+
+    for(unsigned int i = 1; i < sharedMem->skierAmount + 1; i++) {
         pid_t pid = fork();
 
         if(pid == 0) {
@@ -129,9 +171,14 @@ int main(int argc, char *argv[]) {
         }
     }
 
-    fclose(sharedMem->file);
+    for(unsigned int i = 0; i < sharedMem->skierAmount; i++) {
+        wait(NULL);
+    }
+
+    while(wait(NULL) > 0);
+
     destSem(sharedMem);
+    UNMAP(sharedMem->busStop, Z * sizeof(stop_t));
     UNMAP(sharedMem, sizeof(shared_t));
-    UNMAP(sharedMem->busStop, Z * sizeof(stop_t *));
     exit(EXIT_SUCCESS);
 }
