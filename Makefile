@@ -1,4 +1,12 @@
-CFLAGS=-std=gnu99 -Wall -Wextra -Werror -pedantic
+.DEFAULT_GOAL=compile
+CFLAGS=-std=gnu99 -Wall -g -Wextra -Werror -pedantic
+EXEC=proj2
+CC=gcc
 
-all: proj2.c
-	gcc $(CFLAGS) proj2.c -o proj2
+run: compile
+	@./$(EXEC) $(ARGS)
+
+compile: proj2.c
+	$(CC) $(CFLAGS) $^ -o $(EXEC)
+
+.PHONY: compile run
