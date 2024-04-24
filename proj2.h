@@ -18,19 +18,17 @@
   { munmap((pointer), (size)); }
 
 enum argumentErrors {argCount, argPositiveNum, argRange, memError, fileError};
-enum actions {start, arrive, board, leave, ski, finish};
 
 typedef struct {
-  sem_t *waiting;
-  sem_t *boarding;
-  sem_t *onDeck;
-  unsigned int skiers;
+  sem_t waiting;
+  sem_t boarding;
+  unsigned int skiersWaiting;
 } stop_t;
 
 typedef struct shared {
-    stop_t **busStop;
-    sem_t *boarded;
-    sem_t *printLock;
+    stop_t *busStop;
+    sem_t boarded;
+    sem_t printLock;
     size_t lines;
     FILE *file;
     unsigned int skierAmount;
@@ -42,8 +40,8 @@ typedef struct shared {
 bool inRange(int min, int max, int value);
 void parseArgs(int argc, char *argv[]);
 void errorMessage(int errType);
-void cleanMem(shared_t *shared);
 void initSem(shared_t *shared);
 void destSem(shared_t *shared);
 void printFile(shared_t *shared, char *object, ...);
+void bus(shared_t *shared, int TB);
 void skier(shared_t *shared, int id, int TL);
