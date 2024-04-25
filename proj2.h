@@ -21,20 +21,24 @@ enum argumentErrors {argCount, argPositiveNum, argRange, memError, fileError};
 
 typedef struct {
   sem_t waiting;
-  sem_t boarding;
+  sem_t boarded;
+  sem_t mutex;
   unsigned int skiersWaiting;
+  unsigned int skiing;
 } stop_t;
 
 typedef struct shared {
     stop_t *busStop;
-    sem_t boarded;
     sem_t printLock;
+    sem_t waitFinal;
+    sem_t wentSkiing;
     size_t lines;
     FILE *file;
     unsigned int skierAmount;
     unsigned int busCapacity;
     unsigned int stopAmount;
     unsigned int onBoard;
+    unsigned int skiersSkiing;
 } shared_t;
 
 bool inRange(int min, int max, int value);

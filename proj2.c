@@ -42,22 +42,26 @@ bool inRange(int min, int max, int value) {
 
 void initSem(shared_t *shared) {
     sem_init(&(shared->printLock), 1, 1);
-    sem_init(&(shared->boarded), 1, 0);
+    sem_init(&(shared->waitFinal), 1, 0);
+    sem_init(&(shared->wentSkiing), 1, 0);
     shared->lines = 1;
     shared->onBoard = 0;
 
     for(unsigned int i = 0; i < shared->stopAmount; i++) {
         shared->busStop[i].skiersWaiting = 0;
-        sem_init(&(shared->busStop[i].boarding), 1, 0);
-        sem_init(&(shared->busStop[i].waiting), 1, 1);
+        sem_init(&(shared->busStop[i].mutex), 1, 1);
+        sem_init(&(shared->busStop[i].boarded), 1, 0);
+        sem_init(&(shared->busStop[i].waiting), 1, 0);
     }
 }
 
 void destSem(shared_t *shared) {
     sem_destroy(&(shared->printLock));
-    sem_destroy(&(shared->boarded));
-     for(unsigned i = 0; i < shared->stopAmount; i++) {
-        sem_destroy(&(shared->busStop[i].boarding));
+    sem_destroy(&(shared->waitFinal));
+    sem_destroy(&(shared->wentSkiing));
+     for(unsigned int i = 0; i < shared->stopAmount; i++) {
+        sem_destroy(&(shared->busStop[i].mutex));
+        sem_destroy(&(shared->busStop[i].boarded));
         sem_destroy(&(shared->busStop[i].waiting));
     }
 }
@@ -75,50 +79,55 @@ void printFile(shared_t *shared, char *object, ...) {
 
 void bus(shared_t *shared, int TB) {
     printFile(shared, "BUS: started\n");
-    int randomTime = rand() % (TB);
 
-    for(unsigned id = 0; id < shared->stopAmount; id++) {
-        usleep(randomTime);
-        if(id == shared->stopAmount - 1) {
-            printFile(shared, "BUS: arrived to final\n");
-        } else {
+    while(shared->skierAmount != shared->skiersSkiing) {
+        for(unsigned int id = 0; id < shared->stopAmount; id++) {
+            sem_wait(&(shared->busStop[id].mutex));
+            int randTime = rand() % (TB) + 1;
+            usleep(randTime);
             printFile(shared, "BUS: arrived to %d\n", id + 1);
-        }
-        for (unsigned int i = 0; i < shared->busStop[id].skiersWaiting; i++) {
-            if(shared->onBoard < shared->busCapacity) {
-                sem_post(&(shared->busStop[id].boarding));
+            for(unsigned int i = 0; i < shared->busStop[id].skiersWaiting; i++) {
+                if(shared->busCapacity == shared->onBoard) {
+                    break;
+                }
+                sem_post(&(shared->busStop[id].waiting));
+                shared->busStop[id].skiersWaiting--;
+                sem_wait(&(shared->busStop[id].boarded));
             }
-        }
-        if(shared->busCapacity == shared->onBoard || shared->busStop[id].skiersWaiting == 0) {
-            sem_post(&(shared->boarded));
-        }
-        if(id == shared->stopAmount - 1) {
-            printFile(shared, "BUS: leaving final\n");
-        } else {
+            sem_post(&(shared->busStop[id].mutex));
             printFile(shared, "BUS: leaving %d\n", id + 1);
         }
+        printFile(shared, "BUS: arrived to final\n");
+        for(unsigned int i = 0; i < shared->onBoard; i++) {
+            sem_post(&(shared->waitFinal));
+            sem_wait(&(shared->wentSkiing));
+        }
+        shared->onBoard = 0;
+        printFile(shared, "BUS: leaving final\n");
     }
     printFile(shared, "BUS: finish\n");
+
 }
 
 void skier(shared_t *shared, int id, int TL) {
     printFile(shared, "L %d: started\n", id);
-    int randomTime = rand() % (TL);
+    int randomTime = rand() % (TL) + 1;
     usleep(randomTime);
-    srand(time(NULL) ^ (getpid() << 16));
-    int randomStop = rand() % (shared->stopAmount) + 1;
+    int randomStop = rand() % (shared->stopAmount);
 
-    sem_wait(&(shared->busStop[randomStop - 1].waiting));
-    shared->busStop[randomStop - 1].skiersWaiting++;
-    sem_post(&(shared->busStop[randomStop - 1].waiting));
-    printFile(shared, "L %d: arrived to %d\n", id, randomStop);
-
-    sem_wait(&(shared->busStop[randomStop - 1].boarding));
+    sem_wait(&(shared->busStop[randomStop].mutex));
+    shared->busStop[randomStop].skiersWaiting++;
+    sem_post(&(shared->busStop[randomStop].mutex));
+    printFile(shared, "L %d: arrived to %d\n", id, randomStop + 1);
+    sem_wait(&(shared->busStop[randomStop].waiting));
     shared->onBoard++;
+    sem_post(&(shared->busStop[randomStop].boarded));
     printFile(shared, "L %d: boarding\n", id);
-    sem_post(&(shared->busStop[randomStop - 1].boarding));
 
-    sem_post(&(shared->boarded));
+    sem_wait(&(shared->waitFinal));
+    shared->skiersSkiing++;
+    sem_post(&(shared->wentSkiing));
+    printFile(shared, "L %d: going to ski\n", id);
 
 }
 
@@ -136,6 +145,8 @@ int main(int argc, char *argv[]) {
         errorMessage(argRange);
     }
 
+    srand(time(NULL) ^ (getpid() << 16));
+
     shared_t *sharedMem;
 
     MMAP(sharedMem, sizeof(shared_t));
@@ -144,6 +155,7 @@ int main(int argc, char *argv[]) {
     sharedMem->skierAmount = L;
     sharedMem->stopAmount = Z;
     sharedMem->busCapacity = K;
+    sharedMem->skiersSkiing = 0;
 
     initSem(sharedMem);
 
@@ -153,26 +165,29 @@ int main(int argc, char *argv[]) {
     }
 
     pid_t busPid = fork();
+
     if(busPid == 0) {
         bus(sharedMem, TB);
         exit(EXIT_SUCCESS);
     } else if(busPid < 0) {
+        destSem(sharedMem);
+        UNMAP(sharedMem->busStop, Z * sizeof(stop_t));
+        UNMAP(sharedMem, sizeof(shared_t));
         errorMessage(memError);
     }
 
-    for(unsigned int i = 1; i < sharedMem->skierAmount + 1; i++) {
+    for(unsigned int i = 1; i <= sharedMem->skierAmount; i++) {
         pid_t pid = fork();
 
         if(pid == 0) {
             skier(sharedMem, i, TL);
             exit(EXIT_SUCCESS);
         } else if(pid < 0) {
+            destSem(sharedMem);
+            UNMAP(sharedMem->busStop, Z * sizeof(stop_t));
+            UNMAP(sharedMem, sizeof(shared_t));
             errorMessage(memError);
         }
-    }
-
-    for(unsigned int i = 0; i < sharedMem->skierAmount; i++) {
-        wait(NULL);
     }
 
     while(wait(NULL) > 0);
