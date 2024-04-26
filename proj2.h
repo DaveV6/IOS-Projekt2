@@ -24,7 +24,6 @@ typedef struct {
   sem_t boarded;
   sem_t mutex;
   unsigned int skiersWaiting;
-  unsigned int skiing;
 } stop_t;
 
 typedef struct shared {
@@ -38,7 +37,6 @@ typedef struct shared {
     unsigned int busCapacity;
     unsigned int stopAmount;
     unsigned int onBoard;
-    unsigned int skiersSkiing;
 } shared_t;
 
 bool inRange(int min, int max, int value);
