@@ -10,6 +10,7 @@ compile: $(EXEC).c $(EXEC).h
 	$(CC) $(CFLAGS) $^ -o $(EXEC)
 
 pack:
+	@echo Packing zip...
 	@mkdir pack
 	@cp proj2.c pack && cp Makefile pack && cp proj2.h pack
 	@cd pack && zip proj2.zip proj2.c Makefile proj2.h
@@ -17,6 +18,7 @@ pack:
 	@rm -rf pack
 
 clean:
-	rm -rf proj2 && rm -rf proj2.out && rm -rf *.zip
+	@echo Cleaning...
+	@rm -rf proj2 && rm -rf proj2.out && rm -rf *.zip
 
 .PHONY: compile run pack clean
