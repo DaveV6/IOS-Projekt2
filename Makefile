@@ -6,7 +6,7 @@ CC=gcc
 run: compile
 	@./$(EXEC) $(ARGS)
 
-compile: proj2.c
+compile: $(EXEC).c $(EXEC).h
 	$(CC) $(CFLAGS) $^ -o $(EXEC)
 
 pack:
