@@ -67,6 +67,7 @@ void initSem(shared_t *shared) {
     sem_init(&(shared->wentSkiing), 1, 0);
     shared->lines = 1;
     shared->onBoard = 0;
+    shared->skiersSkiing = 0;
 
     for(unsigned int i = 0; i < shared->stopAmount; i++) {
         shared->busStop[i].skiersWaiting = 0;
@@ -114,7 +115,7 @@ void bus(shared_t *shared, int TB) {
     printFile(shared, "BUS: started\n"); // starts the bus
 
     // keeps going on until all skiers are skiing
-    while(shared->skierAmount != 0) {
+    while(shared->skierAmount != shared->skiersSkiing) {
         // loops through all bus stops
         for(unsigned int id = 0; id < shared->stopAmount; id++) {
             int randTime = rand() % (TB) + 1; // random time
@@ -138,7 +139,6 @@ void bus(shared_t *shared, int TB) {
         for(unsigned int i = 0; i < shared->onBoard; i++) {
             sem_post(&(shared->waitFinal)); // unlocks the semaphore which waits for the final stop
             sem_wait(&(shared->wentSkiing)); // waits for the skier to leave the bus and go skiing
-            shared->skierAmount--; // decrements the amount of skiers still waiting to be picked up by the bus
         }
         shared->onBoard = 0; // sets the number of skiers aboard the bus to 0, after they go skiing
         printFile(shared, "BUS: leaving final\n"); // bus leaves the final stop and restarts the loop until all skiers are accounted for
@@ -168,6 +168,7 @@ void skier(shared_t *shared, int id, int TL) {
     sem_post(&(shared->busStop[randomStop].boarded)); // signals that all skiers at the stop were boarded
 
     sem_wait(&(shared->waitFinal)); // waiting for the final bus stop
+    shared->skiersSkiing++; // increments the amount of skiers going to ski
     printFile(shared, "L %d: going to ski\n", id); // after arriving at the final stop, all skiers aboard leave to ski
     sem_post(&(shared->wentSkiing)); // signals that the skiers left the bus
 }

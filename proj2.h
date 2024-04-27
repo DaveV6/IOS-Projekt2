@@ -33,6 +33,7 @@ typedef struct shared {
     unsigned int busCapacity;
     unsigned int stopAmount;
     unsigned int onBoard;
+    unsigned int skiersSkiing;
 } shared_t;
 
 bool inRange(int min, int max, int value);
