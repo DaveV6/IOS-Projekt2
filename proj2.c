@@ -111,7 +111,7 @@ void printFile(shared_t *shared, char *object, ...) {
 /// @param shared structure
 /// @param TB time between bus stops
 void bus(shared_t *shared, int TB) {
-    printFile(shared, "BUS: started\n"); // stars the bus
+    printFile(shared, "BUS: started\n"); // starts the bus
 
     // keeps going on until all skiers are skiing
     while(shared->skierAmount != 0) {
