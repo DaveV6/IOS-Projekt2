@@ -19,4 +19,4 @@ pack:
 clean:
 	rm -rf proj2 && rm -rf proj2.out && rm -rf *.zip
 
-.PHONY: compile run
+.PHONY: compile run pack clean
