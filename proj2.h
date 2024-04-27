@@ -1,13 +1,9 @@
-#include <ctype.h>
 #include <semaphore.h>
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdarg.h>
-#include <sys/ipc.h>
 #include <sys/mman.h>
-#include <sys/shm.h>
-#include <sys/types.h>
 #include <sys/wait.h>
 #include <time.h>
 #include <unistd.h>
